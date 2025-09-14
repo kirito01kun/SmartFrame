@@ -3,33 +3,64 @@
 <head>
   <meta charset="UTF-8" />
   <title>SmartFrame Dashboard</title>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
   <style>
-    body { font-family: Arial, sans-serif; background:#f0f2f5; margin:0; padding:20px; }
-    h1 { text-align:center; }
-    .controls, .device-list, .logs { margin:20px auto; max-width:800px; background:#fff; padding:15px; border-radius:8px; box-shadow:0 2px 6px rgba(0,0,0,0.1);}
-    button { margin:4px; padding:8px 14px; border:none; border-radius:4px; cursor:pointer; }
-    button:hover { opacity:0.9; }
+    body { font-family: 'Segoe UI', sans-serif; background:linear-gradient(to right,#f7f8fa,#e3e6eb); margin:0; padding:20px; color:#333; }
+    h1 { text-align:center; font-size:2em; color:#222; margin-bottom:10px; }
+
+    .controls, .device-list, .logs { 
+      margin:20px auto; max-width:1000px; background:#fff; padding:15px; border-radius:12px; 
+      box-shadow:0 4px 12px rgba(0,0,0,0.08); 
+    }
+
+    .controls { position:sticky;
+    display: flex;
+    justify-content: center; /* center horizontally */
+    flex-wrap: wrap;         /* wrap if viewport is narrow */
+    gap: 10px;  
+    top:0; z-index:10; }
+    button { margin:4px; padding:10px 16px; border:none; border-radius:6px; cursor:pointer; font-size:14px; transition:0.2s ease; }
+    button:hover { transform:scale(1.05); }
+
     .btn-arm { background:#d9534f; color:#fff; }
     .btn-disarm { background:#5cb85c; color:#fff; }
     .btn-refresh { background:#0275d8; color:#fff; }
     .btn-add { background:#5bc0de; color:#fff; }
-    .device { border-bottom:1px solid #ddd; padding:8px 0; display:flex; justify-content:space-between; align-items:center; }
-    .status { font-size:12px; padding:2px 6px; border-radius:4px; }
-    .connected { background:#5cb85c; color:#fff; }
-    .disconnected { background:#aaa; color:#fff; }
-    .armed { background:#d9534f; color:#fff; }
-    .disarmed { background:#5bc0de; color:#fff; }
-    .logs pre { background:#222; color:#0f0; padding:10px; border-radius:4px; height:200px; overflow-y:auto; font-size:13px; }
+
+    .device { background:#fafafa; border:1px solid #eee; border-radius:8px; margin:10px 0; padding:12px; 
+      display:flex; justify-content:space-between; align-items:center; transition:0.3s ease; }
+    .device:hover { box-shadow:0 4px 8px rgba(0,0,0,0.08); background:#fff; }
+
+    .status { font-size:12px; padding:4px 8px; border-radius:4px; margin-left:6px; }
+    .connected { background:#28a745; color:#fff; }
+    .disconnected { background:#6c757d; color:#fff; }
+    .armed { background:#dc3545; color:#fff; }
+    .disarmed { background:#17a2b8; color:#fff; }
+
+    .logs h3 { margin:0 0 10px; }
+
+    /* New log list styles */
+    .logs-list { list-style:none; padding:0; margin:0; max-height:300px; overflow-y:auto; }
+    .logs-list li { padding:10px; margin-bottom:6px; border-radius:6px; display:flex; justify-content:space-between; align-items:center; transition:0.2s ease; }
+    .logs-list li.motion { background:#f8d7da; color:#721c24; }
+    .logs-list li.vibration { background:#fff3cd; color:#856404; }
+    .logs-list li.system { background:#d4edda; color:#155724; }
+    .logs-list li:hover { transform:scale(1.02); }
+
+    @media(max-width:700px) {
+      .device { flex-direction:column; align-items:flex-start; }
+      .device div:last-child { margin-top:8px; }
+    }
   </style>
 </head>
 <body>
-  <h1>SmartFrame Dashboard</h1>
+  <h1><i class="fas fa-shield-alt"></i> SmartFrame Dashboard</h1>
 
   <div class="controls">
-    <button class="btn-arm" onclick="armAll()">ARM ALL</button>
-    <button class="btn-disarm" onclick="disarmAll()">DISARM ALL</button>
-    <button class="btn-refresh" onclick="refreshAll()">REFRESH STATUS</button>
-    <button class="btn-add" onclick="addDevice()">+ Add Device</button>
+    <button class="btn-arm" onclick="armAll()"><i class="fas fa-lock"></i> ARM ALL</button>
+    <button class="btn-disarm" onclick="disarmAll()"><i class="fas fa-lock-open"></i> DISARM ALL</button>
+    <button class="btn-refresh" onclick="refreshAll()"><i class="fas fa-sync-alt"></i> REFRESH</button>
+    <button class="btn-add" onclick="addDevice()"><i class="fas fa-plus"></i> ADD</button>
   </div>
 
   <div class="device-list" id="deviceList">
@@ -37,101 +68,64 @@
   </div>
 
   <div class="logs">
-    <h3>Combined Logs</h3>
-    <pre id="logBox">Loading logs...</pre>
+    <h3><i class="fas fa-clipboard-list"></i> Combined Logs</h3>
+    <ul id="logBox" class="logs-list">
+      <li>Loading logs...</li>
+    </ul>
   </div>
 
 <script>
   let devices = JSON.parse(localStorage.getItem('smartFrames') || '[]');
 
-  function saveDevices() {
-    localStorage.setItem('smartFrames', JSON.stringify(devices));
-  }
+  function saveDevices() { localStorage.setItem('smartFrames', JSON.stringify(devices)); }
 
   async function fetchStatus(device) {
-    try {
-      let res = await fetch(`http://${device.ip}/status`);
-      if (!res.ok) throw new Error();
-      device.connected = true;
-    } catch {
-      device.connected = false;
-    }
+    try { let res = await fetch(`http://${device.ip}/status`); if (!res.ok) throw new Error(); device.connected = true; } 
+    catch { device.connected = false; }
   }
 
   async function fetchLogs(device) {
-    try {
+    try { 
       let res = await fetch(`http://${device.ip}/logs`);
       if (!res.ok) throw new Error();
       let data = await res.json();
-      device.logs = data.logs || [];
-      device.armed = data.armed || false;
-    } catch {
-      device.logs = [];
-      device.armed = false;
-    }
+      device.logs = data.logs || []; device.armed = data.armed || false;
+    } catch { device.logs = []; device.armed = false; }
   }
 
   async function refreshAll() {
-    await Promise.all(devices.map(async d => {
-      await fetchStatus(d);
-      await fetchLogs(d);
-    }));
-    renderDevices();
-    renderLogs();
+    await Promise.all(devices.map(async d => { await fetchStatus(d); await fetchLogs(d); }));
+    renderDevices(); renderLogs();
   }
 
-  async function armAll() {
-    for (let d of devices) {
-      fetch(`http://${d.ip}/arm`, { method: "POST" });
-    }
-    setTimeout(refreshAll, 1000);
-  }
-
-  async function disarmAll() {
-    for (let d of devices) {
-      fetch(`http://${d.ip}/disarm`, { method: "POST" });
-    }
-    setTimeout(refreshAll, 1000);
-  }
+  async function armAll() { for (let d of devices) { fetch(`http://${d.ip}/arm`, { method: "POST" }); } setTimeout(refreshAll, 1000); }
+  async function disarmAll() { for (let d of devices) { fetch(`http://${d.ip}/disarm`, { method: "POST" }); } setTimeout(refreshAll, 1000); }
 
   function addDevice() {
     const name = prompt("Device Name:");
     const ip = prompt("Device IP (e.g. 192.168.1.50):");
     if (!name || !ip) return;
     devices.push({ name, ip, connected:false, logs:[], armed:false });
-    saveDevices();
-    renderDevices();
-    refreshAll();
+    saveDevices(); renderDevices(); refreshAll();
   }
 
-  function removeDevice(i) {
-    if (!confirm("Remove this device?")) return;
-    devices.splice(i,1);
-    saveDevices();
-    renderDevices();
-    refreshAll();
-  }
+  function removeDevice(i) { if (!confirm("Remove this device?")) return; devices.splice(i,1); saveDevices(); renderDevices(); refreshAll(); }
 
   function renderDevices() {
-    const list = document.getElementById("deviceList");
-    list.innerHTML = "";
+    const list = document.getElementById("deviceList"); list.innerHTML = "";
     devices.forEach((d, i) => {
       const div = document.createElement("div");
       div.className = "device";
       div.innerHTML = `
         <div>
           <strong>${d.name}</strong> (${d.ip}) 
-          <span class="status ${d.connected?'connected':'disconnected'}">
-            ${d.connected?'Connected':'Offline'}
-          </span>
-          <span class="status ${d.armed?'armed':'disarmed'}">
-            ${d.armed?'ARMED':'DISARMED'}
-          </span>
+          <span class="status ${d.connected?'connected':'disconnected'}">${d.connected?'Connected':'Offline'}</span>
+          <span class="status ${d.armed?'armed':'disarmed'}">${d.armed?'ARMED':'DISARMED'}</span>
         </div>
         <div>
-          <button onclick="fetch(\`http://${d.ip}/arm\`, {method:'POST'}).then(refreshAll)" class="btn-arm">Arm</button>
-          <button onclick="fetch(\`http://${d.ip}/disarm\`, {method:'POST'}).then(refreshAll)" class="btn-disarm">Disarm</button>
-          <button onclick="removeDevice(${i})" style="background:#ccc">Remove</button>
+          <button onclick="fetch(\`http://${d.ip}/arm\`, {method:'POST'}).then(refreshAll)" class="btn-arm"><i class="fas fa-lock"></i></button>
+          <button onclick="fetch(\`http://${d.ip}/disarm\`, {method:'POST'}).then(refreshAll)" class="btn-disarm"><i class="fas fa-lock-open"></i></button>
+          <button onclick="removeDevice(${i})" style="background:#ccc"><i class="fas fa-trash"></i></button>
         </div>
       `;
       list.appendChild(div);
@@ -139,20 +133,21 @@
   }
 
   function renderLogs() {
+    const logBox = document.getElementById("logBox");
+    logBox.innerHTML = '';
     let all = [];
-    devices.forEach(d => {
-      (d.logs || []).forEach(l => {
-        all.push(`[${d.name}] ${l.timestamp} - ${l.type} (${l.sensor})`);
-      });
+    devices.forEach(d => { (d.logs || []).forEach(l => { all.push({device:d.name, ...l}); }); });
+    all.sort((a,b)=>b.timestamp.localeCompare(a.timestamp));
+    if(all.length === 0) { logBox.innerHTML = '<li>No logs yet.</li>'; return; }
+    all.forEach(l => {
+      const li = document.createElement('li');
+      li.className = l.type==='motion'?'motion':(l.type==='vibration'?'vibration':'system');
+      li.textContent = `[${l.device}] ${l.timestamp} - ${l.type} (${l.sensor})`;
+      logBox.appendChild(li);
     });
-    all.sort().reverse();
-    document.getElementById("logBox").textContent = all.length? all.join("\n") : "No logs yet.";
   }
 
-  // Initial render & auto-refresh
-  renderDevices();
-  refreshAll();
-  setInterval(refreshAll, 5000);
+  renderDevices(); refreshAll(); setInterval(refreshAll, 5000);
 </script>
 </body>
 </html>
