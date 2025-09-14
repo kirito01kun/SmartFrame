@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>SmartFrame Dashboard</title>
+  <style>
+    body { font-family: Arial, sans-serif; background:#f0f2f5; margin:0; padding:20px; }
+    h1 { text-align:center; }
+    .controls, .device-list, .logs { margin:20px auto; max-width:800px; background:#fff; padding:15px; border-radius:8px; box-shadow:0 2px 6px rgba(0,0,0,0.1);}
+    button { margin:4px; padding:8px 14px; border:none; border-radius:4px; cursor:pointer; }
+    button:hover { opacity:0.9; }
+    .btn-arm { background:#d9534f; color:#fff; }
+    .btn-disarm { background:#5cb85c; color:#fff; }
+    .btn-refresh { background:#0275d8; color:#fff; }
+    .btn-add { background:#5bc0de; color:#fff; }
+    .device { border-bottom:1px solid #ddd; padding:8px 0; display:flex; justify-content:space-between; align-items:center; }
+    .status { font-size:12px; padding:2px 6px; border-radius:4px; }
+    .connected { background:#5cb85c; color:#fff; }
+    .disconnected { background:#aaa; color:#fff; }
+    .armed { background:#d9534f; color:#fff; }
+    .disarmed { background:#5bc0de; color:#fff; }
+    .logs pre { background:#222; color:#0f0; padding:10px; border-radius:4px; height:200px; overflow-y:auto; font-size:13px; }
+  </style>
+</head>
+<body>
+  <h1>SmartFrame Dashboard</h1>
+
+  <div class="controls">
+    <button class="btn-arm" onclick="armAll()">ARM ALL</button>
+    <button class="btn-disarm" onclick="disarmAll()">DISARM ALL</button>
+    <button class="btn-refresh" onclick="refreshAll()">REFRESH STATUS</button>
+    <button class="btn-add" onclick="addDevice()">+ Add Device</button>
+  </div>
+
+  <div class="device-list" id="deviceList">
+    <!-- Devices dynamically added here -->
+  </div>
+
+  <div class="logs">
+    <h3>Combined Logs</h3>
+    <pre id="logBox">Loading logs...</pre>
+  </div>
+
+<script>
+  let devices = JSON.parse(localStorage.getItem('smartFrames') || '[]');
+
+  function saveDevices() {
+    localStorage.setItem('smartFrames', JSON.stringify(devices));
+  }
+
+  async function fetchStatus(device) {
+    try {
+      let res = await fetch(`http://${device.ip}/status`);
+      if (!res.ok) throw new Error();
+      device.connected = true;
+    } catch {
+      device.connected = false;
+    }
+  }
+
+  async function fetchLogs(device) {
+    try {
+      let res = await fetch(`http://${device.ip}/logs`);
+      if (!res.ok) throw new Error();
+      let data = await res.json();
+      device.logs = data.logs || [];
+      device.armed = data.armed || false;
+    } catch {
+      device.logs = [];
+      device.armed = false;
+    }
+  }
+
+  async function refreshAll() {
+    await Promise.all(devices.map(async d => {
+      await fetchStatus(d);
+      await fetchLogs(d);
+    }));
+    renderDevices();
+    renderLogs();
+  }
+
+  async function armAll() {
+    for (let d of devices) {
+      fetch(`http://${d.ip}/arm`, { method: "POST" });
+    }
+    setTimeout(refreshAll, 1000);
+  }
+
+  async function disarmAll() {
+    for (let d of devices) {
+      fetch(`http://${d.ip}/disarm`, { method: "POST" });
+    }
+    setTimeout(refreshAll, 1000);
+  }
+
+  function addDevice() {
+    const name = prompt("Device Name:");
+    const ip = prompt("Device IP (e.g. 192.168.1.50):");
+    if (!name || !ip) return;
+    devices.push({ name, ip, connected:false, logs:[], armed:false });
+    saveDevices();
+    renderDevices();
+    refreshAll();
+  }
+
+  function removeDevice(i) {
+    if (!confirm("Remove this device?")) return;
+    devices.splice(i,1);
+    saveDevices();
+    renderDevices();
+    refreshAll();
+  }
+
+  function renderDevices() {
+    const list = document.getElementById("deviceList");
+    list.innerHTML = "";
+    devices.forEach((d, i) => {
+      const div = document.createElement("div");
+      div.className = "device";
+      div.innerHTML = `
+        <div>
+          <strong>${d.name}</strong> (${d.ip}) 
+          <span class="status ${d.connected?'connected':'disconnected'}">
+            ${d.connected?'Connected':'Offline'}
+          </span>
+          <span class="status ${d.armed?'armed':'disarmed'}">
+            ${d.armed?'ARMED':'DISARMED'}
+          </span>
+        </div>
+        <div>
+          <button onclick="fetch(\`http://${d.ip}/arm\`, {method:'POST'}).then(refreshAll)" class="btn-arm">Arm</button>
+          <button onclick="fetch(\`http://${d.ip}/disarm\`, {method:'POST'}).then(refreshAll)" class="btn-disarm">Disarm</button>
+          <button onclick="removeDevice(${i})" style="background:#ccc">Remove</button>
+        </div>
+      `;
+      list.appendChild(div);
+    });
+  }
+
+  function renderLogs() {
+    let all = [];
+    devices.forEach(d => {
+      (d.logs || []).forEach(l => {
+        all.push(`[${d.name}] ${l.timestamp} - ${l.type} (${l.sensor})`);
+      });
+    });
+    all.sort().reverse();
+    document.getElementById("logBox").textContent = all.length? all.join("\n") : "No logs yet.";
+  }
+
+  // Initial render & auto-refresh
+  renderDevices();
+  refreshAll();
+  setInterval(refreshAll, 5000);
+</script>
+</body>
+</html>
